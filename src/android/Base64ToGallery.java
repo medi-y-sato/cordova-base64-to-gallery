@@ -19,6 +19,11 @@ import android.os.Environment;
 import android.util.Base64;
 import android.util.Log;
 
+import org.apache.cordova.PluginResult;
+import android.content.pm.PackageManager;
+import android.Manifest;
+
+
 /**
  * Base64ToGallery.java
  *
@@ -32,10 +37,42 @@ public class Base64ToGallery extends CordovaPlugin {
 
   // Consts
   public static final String EMPTY_STR = "";
+  private final String [] permissions = {
+    Manifest.permission.WRITE_EXTERNAL_STORAGE
+  };
+  private final int permissionsReqId = 0;
+  private CallbackContext execCallback;
+  private JSONArray execArgs;
 
   @Override
-  public boolean execute(String action, JSONArray args,
-      CallbackContext callbackContext) throws JSONException {
+  public boolean execute(String action, JSONArray args,      CallbackContext callbackContext) throws JSONException {
+
+      if (cordova.hasPermission(permissions[0])) {
+        return startMain(args, callbackContext);
+      } else {
+        execCallback = callbackContext;
+        execArgs = args;
+        cordova.requestPermissions(this, 0, permissions);
+      }
+
+    return true;
+  }
+  
+  
+    @Override
+  public void onRequestPermissionResult(int requestCode, String[] permissions, int[] grantResults) throws JSONException {
+    for(int r:grantResults){
+      if(r == PackageManager.PERMISSION_DENIED){
+        execCallback.sendPluginResult(new PluginResult(PluginResult.Status.ILLEGAL_ACCESS_EXCEPTION));
+        return;
+      }
+    }
+    if (requestCode == permissionsReqId) {
+      startMain(execArgs, execCallback);
+    }
+  }
+
+  private boolean startMain(final JSONArray args, CallbackContext callbackContext) {
 
     String base64               = args.optString(0);
     String filePrefix           = args.optString(1);
@@ -56,20 +93,21 @@ public class Base64ToGallery extends CordovaPlugin {
     } else {
 
       // Save the image
-      File imageFile = savePhoto(bmp, filePrefix);
+        File imageFile = savePhoto(bmp, filePrefix);
 
-      if (imageFile == null) {
-        callbackContext.error("Error while saving image");
-      }
+        if (imageFile == null) {
+          callbackContext.error("Error while saving image");
+        }
 
-      // Update image gallery
-      if (mediaScannerEnabled) {
-        scanPhoto(imageFile);
-      }
+        // Update image gallery
+        if (mediaScannerEnabled) {
+          scanPhoto(imageFile);
+        }
 
-      callbackContext.success(imageFile.toString());
+        callbackContext.success(imageFile.toString());
+
     }
-
+    
     return true;
   }
 
@@ -97,6 +135,7 @@ public class Base64ToGallery extends CordovaPlugin {
        * 2.2
        */
       if (check >= 1) {
+
         folder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
 
         if (!folder.exists()) {
@@ -135,4 +174,6 @@ public class Base64ToGallery extends CordovaPlugin {
 
     cordova.getActivity().sendBroadcast(mediaScanIntent);
   }
+
+  
 }
